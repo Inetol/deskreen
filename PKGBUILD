@@ -3,82 +3,94 @@
 
 pkgname=deskreen
 pkgver=2.0.4
-pkgrel=4
+pkgrel=5
 pkgdesc='Turn any device into a secondary screen for your computer'
 arch=('aarch64'
       'x86_64')
 url='https://deskreen.com'
-license=('AGPL3')
-depends=('alsa-lib'
-         'at-spi2-core'
-         'cairo'
-         'dbus'
-         'expat'
-         'gcc-libs'
-         'gdk-pixbuf2'
-         'glib2'
-         'glibc'
-         'gtk3'
-         'hicolor-icon-theme'
-         'libcups'
-         'libdrm'
-         'libx11'
-         'libxcb'
-         'libxcomposite'
-         'libxdamage'
-         'libxext'
-         'libxfixes'
-         'libxkbcommon'
-         'libxrandr'
-         'mesa'
-         'nspr'
-         'nss'
-         'pango')
-makedepends=('nodejs>=16.20.2'
+license=('AGPL-3.0-or-later')
+makedepends=('nodejs-lts-iron'
              'yarn')
 conflicts=("$pkgname-bin")
 source=("$pkgname-$pkgver.tar.gz::https://github.com/pavlobu/$pkgname/archive/v$pkgver.tar.gz"
         "$pkgname.desktop")
 noextract=("$pkgname-$pkgver.tar.gz")
 b2sums=('bef83c836ac722a854b524bc829b8e2f5a395a10d8d5794a148f0ef7f7a9f1292f99e99f219b10a9d550986d224c744047288a62fa37dcc062bebdbe42684e65'
-        '076a41b6d494ecdeb3a563b65dfe9d54250cec521e6e54fc9fe084829af1799f3f4e8287dd9bc80e41ddc74d8f7642ebda91158ccf1056bad87d40e8630cb8d6')
+        'e06627d9d11e385cf1f779e550d7cf050fee92c81057270d4931546520a0bcf59d8dad0b80264468e307437743ca93aac2011ad3fa582cd04b8be22929b8489a')
 
 prepare() {
     mkdir -p "$pkgname-$pkgver/"
     bsdtar -xpf "$pkgname-$pkgver.tar.gz" --strip-components=1 -C "$pkgname-$pkgver/"
-
-    mv "$pkgname-$pkgver/resources/icon.png" "$srcdir/$pkgname.png"
 }
 
 build() {
     # "error:0308010C:digital envelope routines::unsupported" -> https://github.com/webpack/webpack/issues/14532
     export NODE_OPTIONS=--openssl-legacy-provider
 
-    cd "$srcdir/$pkgname-$pkgver/app/client/"
-    yarn install --non-interactive --pure-lockfile
+    yarn set version stable
 
-    cd "$srcdir/$pkgname-$pkgver/"
-    yarn install --non-interactive --pure-lockfile
+    cd "$pkgname-$pkgver/app/client/"
+    yarn install
+    yarn up typescript@4.x
+
+    cd ../../
+    yarn install
+    yarn up typescript@4.x
     yarn build
 
     case "$CARCH" in
         'aarch64')
             yarn electron-builder build --arm64 -l dir
-            mv 'release/linux-arm64-unpacked/' 'release/linux-unpacked/'
+            mv release/linux-arm64-unpacked/ release/linux-unpacked/
             ;;
         'x86_64')
             yarn electron-builder build --x64 -l dir
             ;;
     esac
+
+    cd ../
+    cp "$pkgname-$pkgver/resources/icons/icon_512x512.png" "$pkgname-$pkgver/release/linux-unpacked/$pkgname.png"
+    cp "$srcdir/$pkgname.desktop" "$pkgname-$pkgver/release/linux-unpacked/$pkgname.desktop"
 }
 
 package() {
+    depends=('alsa-lib'
+             'at-spi2-core'
+             'cairo'
+             'dbus'
+             'expat'
+             'gcc-libs'
+             'gdk-pixbuf2'
+             'glib2'
+             'glibc'
+             'gtk3'
+             'hicolor-icon-theme'
+             'libcups'
+             'libdrm'
+             'libx11'
+             'libxcb'
+             'libxcomposite'
+             'libxdamage'
+             'libxext'
+             'libxfixes'
+             'libxkbcommon'
+             'libxrandr'
+             'mesa'
+             'nspr'
+             'nss'
+             'pango')
+
     install -d "$pkgdir/opt/$pkgname/"
-    cp -r "$srcdir/$pkgname-$pkgver/release/linux-unpacked/"* "$pkgdir/opt/$pkgname/"
+    cp -a "$pkgname-$pkgver/release/linux-unpacked/." "$pkgdir/opt/$pkgname/"
+
+    chmod 755 "$pkgdir/opt/$pkgname/$pkgname"
 
     install -d "$pkgdir/usr/bin/"
     ln -s "/opt/$pkgname/$pkgname" "$pkgdir/usr/bin/$pkgname"
 
-    install -Dm644 "$srcdir/$pkgname.png" -t "$pkgdir/usr/share/icons/hicolor/256x256/apps/"
-    install -Dm644 "$srcdir/$pkgname.desktop" -t "$pkgdir/usr/share/applications/"
+    install -d "$pkgdir/usr/share/applications/"
+    ln -s "/opt/$pkgname/$pkgname.desktop" "$pkgdir/usr/share/applications/$pkgname.desktop"
+
+    install -d "$pkgdir/usr/share/icons/hicolor/512x512/apps/"
+    ln -s "/opt/$pkgname/$pkgname.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/$pkgname.png"
 }
